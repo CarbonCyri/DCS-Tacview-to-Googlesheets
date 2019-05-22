@@ -1,6 +1,8 @@
 # Tacview Flight Log Export File
 import_path = "E:/Daten/Niclas/Owncloud/Documents/DCS/DFA Iranian Intervention/"
 
+csv_delimiter = ';'
+
 ####################################################################################################
 # MISSION DATA
 current_mission = "01 Operation Arrival"
