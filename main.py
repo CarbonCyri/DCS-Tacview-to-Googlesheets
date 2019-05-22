@@ -20,6 +20,7 @@ unit_scored_kills = list()
 
 
 # OAUTH CREDENTIALS
+# Load credentials from token.pickle if possible, else request token using credentials.json from google oauth
 def oauth():
     creds = None
     if os.path.exists('token.pickle'):
@@ -40,12 +41,15 @@ def oauth():
     return creds
 
 
-# import Mission.csv-files
+# CSV-READER
+# import Mission.csv file; default delimiter = ','
 def import_csv(csv_file):
     tacview_log = []
 
     with open(csv_file, "r", encoding="utf8") as file:
-        reader = csv.DictReader(file, delimiter=';')
+        if csv_delimiter is None:
+            csv_delimiter = ','
+        reader = csv.DictReader(file, delimiter=csv_delimiter)
         for line in reader:
             tacview_log.append(line)
 
@@ -75,7 +79,7 @@ def import_csv(csv_file):
         elif line["Event"] == "HasBeenDestroyed":
             unit_destroyed.append(line)
 
-    # adjust for RIOs
+    # add Rio to Primary Unit if Unit == F-14B, if Pilot/Rio pair is in config-list
     for unit_list in [unit_spawned, unit_tookoff, unit_landed, unit_despawned, unit_fired, unit_hit, unit_destroyed]:
         for x in range(len(unit_list)):
             if unit_list[x]["Primary Object Name"] == "F-14B Tomcat":
@@ -88,17 +92,22 @@ def import_csv(csv_file):
 
 
 # GET WEAPONS FIRED
+# dict: [coalition][weapon_type] = count
 def get_weapons_fired():
-    total_weapons_fired = {
-        "USA": {},
-        "Iran": {}
-    }
+    # create initial dict
+    total_weapons_fired = dict()
+    for coalition in coalitions:
+        total_weapons_fired[coalitions] = dict()
+    
+    # write data
     for shot in unit_fired:
         weapon_name = shot["Secondary Object Name"]
         weapon_count = shot["Occurrences"]
         weapon_coalition = shot["Primary Object Coalition"]
+        # if weapon already in dict
         if weapon_name in total_weapons_fired[weapon_coalition]:
             total_weapons_fired[weapon_coalition][weapon_name] += int(weapon_count)
+        # if weapon not already in dict
         else:
             total_weapons_fired[weapon_coalition][weapon_name] = int(weapon_count)
 
@@ -106,47 +115,53 @@ def get_weapons_fired():
 
 
 # GET UNIT DAMAGED OR DESTROYED
+# dict: [coalition][destroyed/damaged][unit_type] = count
 def get_unit_damage():
-    unit_dnd = {
-        "USA": {
-            "destroyed": {},
-            "damaged": {}
-        },
-        "Iran": {
-            "destroyed": {},
-            "damaged": {}
-        }
-    }
+    # create initial dict
+    unit_dnd = dict()
+    for coalition in coalitions:
+        unit_dnd[coalition] = {
+                               "destroyed": {},
+                               "damaged": {}
+                               }
 
+    # write data
     for unit in unit_destroyed:
         unit_id = unit["Primary Object ID"]
         unit_coalition = unit["Primary Object Coalition"]
+        # if no unit_coalition
         if unit_coalition == "":
             continue
         unit_type = unit["Primary Object Name"]
         unit_pilot = unit["Primary Object Pilot"]
         unit_rio = "-"
+        # check for Rio for primary_unit
         generator = (crew for crew in f14_crew[current_mission] if unit_pilot in crew.values())
         for item in generator:
             unit_pilot = item["pilot"]
             unit_rio = item["rio"]
         unit_killer = unit["Secondary Object Pilot"]
         unit_killer_rio = "-"
+        # check for Rio for secondary_unit
         generator = (crew for crew in f14_crew[current_mission] if unit_killer in crew.values())
         for item in generator:
+            unit_killer = = item["pilot"]
             unit_killer_rio = item["rio"]
 
+        # if unit == F-14B
         if unit_type == "F-14B Tomcat":
             unit_dnd[unit_coalition]["destroyed"][unit_id] = {
                 "Type": unit_type,
                 "Pilot": unit_pilot,
                 "Rio": unit_rio
             }
+        # if unit != AI
         elif unit_pilot != "":
             unit_dnd[unit_coalition]["destroyed"][unit_id] = {
                 "Type": unit_type,
                 "Pilot": unit_pilot
             }
+        # if unit == AI
         else:
             unit_dnd[unit_coalition]["destroyed"][unit_id] = {
                 "Type": unit_type
